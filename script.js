@@ -1,4 +1,15 @@
+const g = 9.8;
+const FPS = 10;
+const deltaTime = 1 / FPS;
+
+
 function init() {
+	//Basic THREEJS set up
+	var scene = new THREE.Scene();
+	var renderer = new THREE.WebGLRenderer();
+	renderer.setClearColor(new THREE.Color(0xffffff));
+	renderer.setSize(window.innerWidth, window.innerHeight);
+
 	//Display values for balls
 	var sphereGeometry = new THREE.SphereGeometry(10, 20, 20);
 	var sphereMaterial = new THREE.MeshLambertMaterial({color: 0x303090});
@@ -15,6 +26,39 @@ function init() {
 		new THREE.Vector3(0,200,0),
 	);
 
+	// Initialize spheres
+	let line_material = new THREE.LineBasicMaterial({
+		color: 0x00aaff
+	});
+	let geometry_pseudo_real = new THREE.Geometry();
+	var line_pseudo_real = new THREE.Line(geometry_pseudo_real, line_material);
+	var spheres_pseudo_real = [];
+	var init_sphere_pseudo_real = function(mass, theta, length) {
+		let geometry = new THREE.SphereBufferGeometry(mass/3, 32, 32);
+		let material = new THREE.MeshPhongMaterial({
+			color: 0xa6ea15
+		});
+
+		let sphere = new THREE.Mesh(geometry, material);
+		sphere.length = length;
+		sphere.theta = theta;
+		sphere.theta_v = 0;
+		sphere.mass = mass;
+
+		// Create its rope
+		if(spheres_pseudo_real.length > 0) {
+			// Position is in reference to previous ball
+			sphere.position.copy(spheres_pseudo_real[spheres_pseudo_real.length-1].position);
+			sphere.position.x += sphere.length * Math.sin(sphere.theta);
+			sphere.position.y += -sphere.length * Math.cos(sphere.theta);
+		}
+		line_pseudo_real.geometry.vertices.push(sphere.position);
+
+		// Push to containers
+		spheres_pseudo_real.push(sphere);
+		scene.add(sphere);
+	}
+
 	//Different classes for each pendulum -could probably be streamlined
 	class Pendulum {
 		ball = new THREE.Mesh(sphereGeometry, sphereMaterial);
@@ -25,12 +69,6 @@ function init() {
 		ball = new THREE.Mesh(sphereGeometry, sphereMaterial2);
 		rope = new THREE.Line(lineGeometry, lineMaterial);
 	}
-
-	//Basic THREEJS set up
-	var scene = new THREE.Scene();
-	var renderer = new THREE.WebGLRenderer();
-	renderer.setClearColor(new THREE.Color(0xffffff));
-	renderer.setSize(window.innerWidth, window.innerHeight);
 
 	//Initial camera setup
 	var camera = new THREE.PerspectiveCamera(65, window.innerWidth/window.innerHeight, 0.1, 1000);
@@ -52,9 +90,15 @@ function init() {
 	light.position.set( 0, 1, 0 ); 
 	scene.add( light );
 
+	// Initialize scene objects
+	init_sphere_pseudo_real(1, 0, 0);
+	init_sphere_pseudo_real(20, Math.PI/2, 100);
+	init_sphere_pseudo_real(20, Math.PI/4, 100);
+
 	var P1 = new Pendulum();
 	var P2 = new Pendulum2();
-
+	
+	scene.add(line_pseudo_real);
 	scene.add(P1.ball);
 	scene.add(P1.rope);
 	scene.add(P2.ball);
@@ -106,6 +150,51 @@ function init() {
 		Velocity2 *= 0.99;
 		
 		currDir2 += Velocity2;
+
+
+		// Update for the pseudo realistic balls
+		// Calculate acceleration
+		let num1 = -g * (2 * spheres_pseudo_real[1].mass + spheres_pseudo_real[2].mass) * Math.sin(spheres_pseudo_real[1].theta);
+		let num2 = -spheres_pseudo_real[2].mass * g * Math.sin(spheres_pseudo_real[1].theta - (2 * spheres_pseudo_real[2].theta));
+		let num3 = -2 * Math.sin(spheres_pseudo_real[1].theta - spheres_pseudo_real[2].theta) * spheres_pseudo_real[2].mass;
+		let num4 = spheres_pseudo_real[2].theta_v * spheres_pseudo_real[2].theta_v * spheres_pseudo_real[2].length + spheres_pseudo_real[1].theta_v * spheres_pseudo_real[1].theta_v * spheres_pseudo_real[1].length * Math.cos(spheres_pseudo_real[1].theta - spheres_pseudo_real[2].theta);
+		let den = spheres_pseudo_real[1].length * ((2 * spheres_pseudo_real[1].mass) + spheres_pseudo_real[2].mass - spheres_pseudo_real[2].mass * Math.cos(2 * spheres_pseudo_real[1].theta - 2 * spheres_pseudo_real[2].theta));
+		let theta1_a = (num1 + num2 + (num3 * num4)) / den;
+
+		num1 = 2 * Math.sin(spheres_pseudo_real[1].theta - spheres_pseudo_real[2].theta);
+		num2 = spheres_pseudo_real[1].theta_v * spheres_pseudo_real[1].theta_v * spheres_pseudo_real[1].length * (spheres_pseudo_real[1].mass + spheres_pseudo_real[2].mass);
+		num3 = g * (spheres_pseudo_real[1].mass + spheres_pseudo_real[2].mass) * Math.cos(spheres_pseudo_real[1].theta);
+		num4 = spheres_pseudo_real[2].theta_v * spheres_pseudo_real[2].theta_v * spheres_pseudo_real[2].length * spheres_pseudo_real[2].mass * Math.cos(spheres_pseudo_real[1].theta - spheres_pseudo_real[2].theta);
+		den = spheres_pseudo_real[2].length * ((2 * spheres_pseudo_real[1].mass) + spheres_pseudo_real[2].mass - spheres_pseudo_real[2].mass * Math.cos(2 * spheres_pseudo_real[1].theta - 2 * spheres_pseudo_real[2].theta));
+		let theta2_a = (num1 * (num2 + num3 + num4)) / den;
+
+		// Acceleration -> Velocity
+		spheres_pseudo_real[1].theta_v += theta1_a * deltaTime;
+		spheres_pseudo_real[2].theta_v += theta2_a * deltaTime;
+
+		// Damping
+		let damping_coeff = 0.1
+		spheres_pseudo_real[1].theta_v *= 1-(damping_coeff * deltaTime);
+		spheres_pseudo_real[2].theta_v *= 1-(damping_coeff * deltaTime);
+
+		// Velocity -> Theta
+		spheres_pseudo_real[1].theta += spheres_pseudo_real[1].theta_v * deltaTime * 3;
+		spheres_pseudo_real[2].theta += spheres_pseudo_real[2].theta_v * deltaTime * 3;
+
+		// Theta -> position
+		spheres_pseudo_real[1].position.copy(spheres_pseudo_real[0].position); // Reference point is origin
+		spheres_pseudo_real[1].position.x += spheres_pseudo_real[1].length * Math.sin(spheres_pseudo_real[1].theta);
+		spheres_pseudo_real[1].position.y += -spheres_pseudo_real[1].length * Math.cos(spheres_pseudo_real[1].theta);
+
+		spheres_pseudo_real[2].position.copy(spheres_pseudo_real[1].position); // Reference point is first ball
+		spheres_pseudo_real[2].position.x += spheres_pseudo_real[2].length * Math.sin(spheres_pseudo_real[2].theta);
+		spheres_pseudo_real[2].position.y += -spheres_pseudo_real[2].length * Math.cos(spheres_pseudo_real[2].theta);
+
+		// Update lines as well
+		line_pseudo_real.geometry.verticesNeedUpdate = true;
+		line_pseudo_real.geometry.vertices[0].copy(spheres_pseudo_real[0].position);
+		line_pseudo_real.geometry.vertices[1].copy(spheres_pseudo_real[1].position);
+		line_pseudo_real.geometry.vertices[2].copy(spheres_pseudo_real[2].position);
 	}
 
 	function renderScene() {
