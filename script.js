@@ -197,6 +197,28 @@ function init() {
 		line_pseudo_real.geometry.vertices[2].copy(spheres_pseudo_real[2].position);
 	}
 
+    var GUIControls = new function(){
+        this.Mass1 = 100;
+	    this.Magnitude1 = 100;
+        this.Swing1 = true;
+        
+        this.Mass2 = 100;
+	    this.Magnitude2 = 100;
+        this.Swing2 = true;
+    }
+    
+    var GUI = new dat.GUI();
+    var Folder1 = GUI.addFolder("Pendulum1");
+    var Folder2 = GUI.addFolder("Pendulum2");
+
+    Folder1.add(GUIControls, "Mass1", 1, 200);
+    Folder1.add(GUIControls, "Magnitude1", 1, 200);
+    Folder1.add(GUIControls, "Swing1", true, false);
+
+    Folder2.add(GUIControls, "Mass2", 1, 200);
+    Folder2.add(GUIControls, "Magnitude2", 1, 200);
+    Folder2.add(GUIControls, "Swing2", true, false);
+
 	function renderScene() {
 		requestAnimationFrame(renderScene);
 
